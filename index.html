@@ -82,14 +82,14 @@
   </style>
 </head>
 <body>
-  <h1>🧴 Daily Skincare Tracker</h1>
+  <h2>🧴 Daily Skincare Tracker</h2>
   <div id="am-routine" class="am">
-    <h2>☀️ AM Routine</h2>
+    <h3>☀️ AM Routine</h3>
     <div class="routine" id="am-steps"></div>
   </div>
 
   <div id="pm-routine" class="pm">
-    <h2>🌙 PM Routine</h2>
+    <h3>🌙 PM Routine</h3>
     <div class="routine" id="pm-steps"></div>
   </div>
 
@@ -134,7 +134,7 @@
     function showOverlay(type, waitTime, step) {
       const overlay = document.getElementById("overlay");
       overlay.className = type;
-      overlay.textContent = `${step} — Please wait ${waitTime}s...`;
+      overlay.textContent = `${step} Applied \n Please wait \n${waitTime}s...`;
       overlay.style.display = "flex";
 
       const checkboxes = document.querySelectorAll('input[type="checkbox"]');
@@ -185,11 +185,18 @@
         const pmContainer = document.getElementById('pm-routine');
         if (pmContainer) pmContainer.style.display = 'none'; // Hide the second container
 
+        let errorDetails = `<p><strong>Details:</strong> ${error.message}</p>`;
+        if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
+          errorDetails += `<p>This may be a network or CORS issue. Please check your internet connection and the browser's developer console (F12) for more information.</p>`;
+        } else {
+          errorDetails += `<p>Please ensure your Google Sheet is shared with "Anyone with the link can view" and that the sheet names ("Routine", "Timer") are correct.</p>`;
+        }
+
         if (amContainer) {
           amContainer.innerHTML = `
             <h2 style="color: #d9534f;">❌ Error Loading Routine</h2>
-            <p><strong>Details:</strong> ${error.message}</p>
-            <p>Please ensure your Google Sheet is shared with "Anyone with the link can view" and check the console (F12) for more info.</p>`;
+            ${errorDetails}
+            `;
         }
       }
     }
