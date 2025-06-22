@@ -65,9 +65,20 @@
       display: none;
       align-items: center;
       justify-content: center;
+      flex-direction: column; /* Stack content vertically */
       z-index: 9999;
       text-align: center;
       font-size: 2em;
+    }
+
+    #overlay .timer-text {
+      margin: 0;
+    }
+
+    #overlay .timer-countdown {
+      font-size: 4em; /* Makes the timer significantly larger */
+      font-weight: bold;
+      margin-top: 10px;
     }
 
     #overlay.am {
@@ -134,19 +145,32 @@
     function showOverlay(type, waitTime, step) {
       const overlay = document.getElementById("overlay");
       overlay.className = type;
-      overlay.textContent = `${step} Applied \n Please wait \n${waitTime}s...`;
+      // Use innerHTML to structure the content for styling
+      overlay.innerHTML = `
+        <div>
+          <p class="timer-text">${step} Applied</p>
+          <p class="timer-text">Please wait</p>
+          <span class="timer-countdown">${waitTime}s</span>
+        </div>
+      `;
       overlay.style.display = "flex";
 
       const checkboxes = document.querySelectorAll('input[type="checkbox"]');
       checkboxes.forEach(cb => cb.disabled = true);
 
       let counter = waitTime;
+      const countdownElement = overlay.querySelector('.timer-countdown');
+
       const interval = setInterval(() => {
         counter--;
-        overlay.textContent = `${step} — Please wait ${counter}s...`;
+        // Only update the part of the text that changes for better performance
+        if (countdownElement) {
+          countdownElement.textContent = `${counter}s`;
+        }
         if (counter <= 0) {
           clearInterval(interval);
           overlay.style.display = "none";
+          overlay.innerHTML = ''; // Clean up for next time
           checkboxes.forEach(cb => cb.disabled = false);
         }
       }, 1000);
