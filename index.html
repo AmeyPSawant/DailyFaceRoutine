@@ -2,159 +2,193 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Skincare Routine Tracker</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Daily Skincare Routine</title>
   <style>
     body {
-      font-family: Arial, sans-serif;
-      background: #f5f7fa;
-      color: #333;
+      font-family: 'Segoe UI', sans-serif;
+      background: #ffffff;
       margin: 0;
       padding: 20px;
+      color: #333;
     }
 
     h1 {
       text-align: center;
-      margin-bottom: 20px;
+      margin-bottom: 10px;
     }
 
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-bottom: 40px;
-    }
-
-    th, td {
-      border: 1px solid #ccc;
-      padding: 12px;
-      text-align: left;
-      vertical-align: top;
-    }
-
-    th {
-      background-color: #e2e8f0;
+    h2 {
+      margin-top: 40px;
+      padding-bottom: 10px;
+      border-bottom: 2px solid #ccc;
     }
 
     .routine {
       display: flex;
       flex-direction: column;
-      gap: 5px;
+      gap: 15px;
+      margin: 20px 0;
     }
 
-    .routine label {
+    .step {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 10px;
+      font-size: 18px;
     }
 
-    .btn-reset {
-      display: block;
-      margin: 0 auto;
-      background: #ff6961;
+    input[type="checkbox"] {
+      width: 20px;
+      height: 20px;
+    }
+
+    .am {
+      background: linear-gradient(to right, #ffffff, #d4edff);
+      padding: 20px;
+      border-radius: 10px;
+    }
+
+    .pm {
+      background: linear-gradient(to right, #1a1a2e, #3f0071);
       color: white;
-      border: none;
-      padding: 10px 20px;
-      font-size: 16px;
-      cursor: pointer;
-      border-radius: 5px;
+      padding: 20px;
+      border-radius: 10px;
     }
 
-    .btn-reset:hover {
-      background: #e04840;
+    #overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+      text-align: center;
+      font-size: 2em;
+    }
+
+    #overlay.am {
+      background: rgba(255, 255, 255, 0.8);
+      color: #000;
+    }
+
+    #overlay.pm {
+      background: rgba(0, 0, 0, 0.8);
+      color: #fff;
     }
   </style>
 </head>
 <body>
-  <h1>🧴 Skincare Routine Tracker</h1>
-  <table>
-    <thead>
-      <tr>
-        <th>Day</th>
-        <th>AM Routine</th>
-        <th>PM Routine</th>
-      </tr>
-    </thead>
-    <tbody id="routine-table">
-      <!-- JavaScript will populate rows here -->
-    </tbody>
-  </table>
+  <h1>🧴 Daily Skincare Tracker</h1>
+  <div id="am-routine" class="am">
+    <h2>☀️ AM Routine</h2>
+    <div class="routine" id="am-steps"></div>
+  </div>
 
-  <button class="btn-reset" onclick="resetProgress()">Reset All Progress</button>
+  <div id="pm-routine" class="pm">
+    <h2>🌙 PM Routine</h2>
+    <div class="routine" id="pm-steps"></div>
+  </div>
+
+  <div id="overlay"></div>
 
   <script>
-    const routineData = {
-      "Mon": {
-        am: "Foaming Cleanser → Clay Mask (10 min) → Rinse → Snail Mucin → Moisturizer → Sunscreen",
-        pm: "Hydrating Cleanser → Snail Mucin → Moisturizer"
-      },
-      "Tue": {
-        am: "Hydrating Cleanser → Niacinamide → Moisturizer → Sunscreen",
-        pm: "Hydrating Cleanser → Snail Mucin → Niacinamide → Moisturizer"
-      },
-      "Wed": {
-        am: "Foaming Cleanser → Snail Mucin → Moisturizer → Sunscreen",
-        pm: "Hydrating Cleanser → Snail Mucin → Moisturizer"
-      },
-      "Thu": {
-        am: "Hydrating Cleanser → Snail Mucin → Moisturizer → Sunscreen",
-        pm: "Hydrating Cleanser → Snail Mucin → Retinol (0.2%) → Moisturizer"
-      },
-      "Fri": {
-        am: "Foaming Cleanser → Niacinamide → Moisturizer → Sunscreen",
-        pm: "Hydrating Cleanser → Snail Mucin → Moisturizer"
-      },
-      "Sat": {
-        am: "Hydrating Cleanser → Snail Mucin → Moisturizer → Sunscreen",
-        pm: "Hydrating Cleanser → Snail Mucin → Niacinamide → Moisturizer"
-      },
-      "Sun": {
-        am: "Foaming Cleanser → Snail Mucin → Moisturizer → Sunscreen",
-        pm: "Hydrating Cleanser → Snail Mucin → Retinol (0.2%) → Moisturizer"
-      }
-    };
+    // === Google Sheets Integration ===
+    // Replace with your own published Google Sheets URL
+    const sheetUrl = "https://docs.google.com/spreadsheets/d/1bnIeueU-AkhRVe6xbQBG7cxdIg8Q7IIhGRl_qBOk6qY";
 
-    function createRoutineChecklist(day, type, steps) {
-      const key = `${day}-${type}`;
-      const stepsArr = steps.split("→").map(s => s.trim());
-      return stepsArr.map((step, index) => {
-        const id = `${key}-${index}`;
-        const checked = localStorage.getItem(id) === "true";
-        return `
-          <label>
-            <input type="checkbox" id="${id}" ${checked ? "checked" : ""} onchange="saveProgress('${id}')"/>
-            ${step}
-          </label>`;
-      }).join("");
+    // Sheet 1: Routines (First row = AM/PM headers, First column = days)
+    // Sheet 2: Timers (First column = Product, Second column = Wait time in seconds)
+
+    async function fetchSheetData(sheetNumber = 1) {
+      const base = sheetUrl.replace("/edit#gid=", "/gviz/tq?tqx=out:json&sheet=");
+      const response = await fetch(`${base}${sheetNumber}`);
+      const text = await response.text();
+      const json = JSON.parse(text.substring(47).slice(0, -2));
+      const rows = json.table.rows;
+      return rows.map(row => row.c.map(cell => cell?.v || ""));
     }
 
-    function saveProgress(id) {
-      const isChecked = document.getElementById(id).checked;
-      localStorage.setItem(id, isChecked);
+    function getCurrentDay() {
+      return new Date().toLocaleDateString("en-US", { weekday: 'short' });
     }
 
-    function resetProgress() {
-      if (confirm("Are you sure you want to reset all progress?")) {
-        localStorage.clear();
-        location.reload();
-      }
+    function showOverlay(type, waitTime, step) {
+      const overlay = document.getElementById("overlay");
+      overlay.className = type;
+      overlay.textContent = `${step} — Please wait ${waitTime}s...`;
+      overlay.style.display = "flex";
+
+      const checkboxes = document.querySelectorAll('input[type="checkbox"]');
+      checkboxes.forEach(cb => cb.disabled = true);
+
+      let counter = waitTime;
+      const interval = setInterval(() => {
+        counter--;
+        overlay.textContent = `${step} — Please wait ${counter}s...`;
+        if (counter <= 0) {
+          clearInterval(interval);
+          overlay.style.display = "none";
+          checkboxes.forEach(cb => cb.disabled = false);
+        }
+      }, 1000);
     }
 
-    function loadRoutineTable() {
-      const table = document.getElementById("routine-table");
-      for (const day in routineData) {
-        const amRoutine = createRoutineChecklist(day, "am", routineData[day].am);
-        const pmRoutine = createRoutineChecklist(day, "pm", routineData[day].pm);
-        const row = `
-          <tr>
-            <td><strong>${day}</strong></td>
-            <td class="routine">${amRoutine}</td>
-            <td class="routine">${pmRoutine}</td>
-          </tr>`;
-        table.innerHTML += row;
-      }
+    async function init() {
+      const currentDay = getCurrentDay();
+      const [routineData, timerData] = await Promise.all([
+        fetchSheetData(1),
+        fetchSheetData(2)
+      ]);
+
+      const headers = routineData[0];
+      const dayIndex = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }[currentDay];
+      const todayData = routineData[dayIndex + 1];
+
+      const amSteps = todayData.slice(1, headers.indexOf("PM"));
+      const pmSteps = todayData.slice(headers.indexOf("PM") + 1);
+
+      const timers = {};
+      timerData.forEach(([product, time]) => {
+        if (product) timers[product.trim()] = parseInt(time);
+      });
+
+      createRoutineList(amSteps, "am-steps", "am", timers);
+      createRoutineList(pmSteps, "pm-steps", "pm", timers);
     }
 
-    loadRoutineTable();
+    function createRoutineList(steps, containerId, type, timers) {
+      const container = document.getElementById(containerId);
+      steps.forEach((step, idx) => {
+        const stepId = `${containerId}-${idx}`;
+
+        const div = document.createElement("div");
+        div.className = "step";
+
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.id = stepId;
+
+        const label = document.createElement("label");
+        label.htmlFor = stepId;
+        label.textContent = step;
+
+        checkbox.addEventListener("change", () => {
+          if (checkbox.checked && timers[step]) {
+            showOverlay(type, timers[step], step);
+          }
+        });
+
+        div.appendChild(checkbox);
+        div.appendChild(label);
+        container.appendChild(div);
+      });
+    }
+
+    init();
   </script>
 </body>
 </html>
