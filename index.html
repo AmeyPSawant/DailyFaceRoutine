@@ -98,19 +98,21 @@
   <script>
     // === Google Sheets Integration ===
     // Replace with your own published Google Sheets URL
-    const sheetUrl = "https://docs.google.com/spreadsheets/d/1bnIeueU-AkhRVe6xbQBG7cxdIg8Q7IIhGRl_qBOk6qY";
+    const sheetUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQPs2suflkPlpptFbPYWvIUyHIKKSBiqNY0Bi218FUmJvD0eYAljcNGCSWJN-kTShdMOJUeyZl1sDxt/pubhtml";
 
     // Sheet 1: Routines (First row = AM/PM headers, First column = days)
     // Sheet 2: Timers (First column = Product, Second column = Wait time in seconds)
 
-    async function fetchSheetData(sheetNumber = 1) {
-      const base = sheetUrl.replace("/edit#gid=", "/gviz/tq?tqx=out:json&sheet=");
-      const response = await fetch(`${base}${sheetNumber}`);
+    async function fetchSheetData(sheetName) {
+      const base = sheetUrl.replace("/edit#gid=", "");
+      const url = `${base}/gviz/tq?tqx=out:json&sheet=${sheetName}`;
+      const response = await fetch(url);
       const text = await response.text();
       const json = JSON.parse(text.substring(47).slice(0, -2));
       const rows = json.table.rows;
       return rows.map(row => row.c.map(cell => cell?.v || ""));
     }
+
 
     function getCurrentDay() {
       return new Date().toLocaleDateString("en-US", { weekday: 'short' });
@@ -140,9 +142,10 @@
     async function init() {
       const currentDay = getCurrentDay();
       const [routineData, timerData] = await Promise.all([
-        fetchSheetData(1),
-        fetchSheetData(2)
+        fetchSheetData("Routines"),
+        fetchSheetData("Timers")
       ]);
+
 
       const headers = routineData[0];
       const dayIndex = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }[currentDay];
