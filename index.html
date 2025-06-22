@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Skincare Routine Tracker</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f5f7fa;
+      color: #333;
+      margin: 0;
+      padding: 20px;
+    }
+
+    h1 {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 40px;
+    }
+
+    th, td {
+      border: 1px solid #ccc;
+      padding: 12px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background-color: #e2e8f0;
+    }
+
+    .routine {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .routine label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn-reset {
+      display: block;
+      margin: 0 auto;
+      background: #ff6961;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+      border-radius: 5px;
+    }
+
+    .btn-reset:hover {
+      background: #e04840;
+    }
+  </style>
+</head>
+<body>
+  <h1>🧴 Skincare Routine Tracker</h1>
+  <table>
+    <thead>
+      <tr>
+        <th>Day</th>
+        <th>AM Routine</th>
+        <th>PM Routine</th>
+      </tr>
+    </thead>
+    <tbody id="routine-table">
+      <!-- JavaScript will populate rows here -->
+    </tbody>
+  </table>
+
+  <button class="btn-reset" onclick="resetProgress()">Reset All Progress</button>
+
+  <script>
+    const routineData = {
+      "Mon": {
+        am: "Foaming Cleanser → Clay Mask (10 min) → Rinse → Snail Mucin → Moisturizer → Sunscreen",
+        pm: "Hydrating Cleanser → Snail Mucin → Moisturizer"
+      },
+      "Tue": {
+        am: "Hydrating Cleanser → Niacinamide → Moisturizer → Sunscreen",
+        pm: "Hydrating Cleanser → Snail Mucin → Niacinamide → Moisturizer"
+      },
+      "Wed": {
+        am: "Foaming Cleanser → Snail Mucin → Moisturizer → Sunscreen",
+        pm: "Hydrating Cleanser → Snail Mucin → Moisturizer"
+      },
+      "Thu": {
+        am: "Hydrating Cleanser → Snail Mucin → Moisturizer → Sunscreen",
+        pm: "Hydrating Cleanser → Snail Mucin → Retinol (0.2%) → Moisturizer"
+      },
+      "Fri": {
+        am: "Foaming Cleanser → Niacinamide → Moisturizer → Sunscreen",
+        pm: "Hydrating Cleanser → Snail Mucin → Moisturizer"
+      },
+      "Sat": {
+        am: "Hydrating Cleanser → Snail Mucin → Moisturizer → Sunscreen",
+        pm: "Hydrating Cleanser → Snail Mucin → Niacinamide → Moisturizer"
+      },
+      "Sun": {
+        am: "Foaming Cleanser → Snail Mucin → Moisturizer → Sunscreen",
+        pm: "Hydrating Cleanser → Snail Mucin → Retinol (0.2%) → Moisturizer"
+      }
+    };
+
+    function createRoutineChecklist(day, type, steps) {
+      const key = `${day}-${type}`;
+      const stepsArr = steps.split("→").map(s => s.trim());
+      return stepsArr.map((step, index) => {
+        const id = `${key}-${index}`;
+        const checked = localStorage.getItem(id) === "true";
+        return `
+          <label>
+            <input type="checkbox" id="${id}" ${checked ? "checked" : ""} onchange="saveProgress('${id}')"/>
+            ${step}
+          </label>`;
+      }).join("");
+    }
+
+    function saveProgress(id) {
+      const isChecked = document.getElementById(id).checked;
+      localStorage.setItem(id, isChecked);
+    }
+
+    function resetProgress() {
+      if (confirm("Are you sure you want to reset all progress?")) {
+        localStorage.clear();
+        location.reload();
+      }
+    }
+
+    function loadRoutineTable() {
+      const table = document.getElementById("routine-table");
+      for (const day in routineData) {
+        const amRoutine = createRoutineChecklist(day, "am", routineData[day].am);
+        const pmRoutine = createRoutineChecklist(day, "pm", routineData[day].pm);
+        const row = `
+          <tr>
+            <td><strong>${day}</strong></td>
+            <td class="routine">${amRoutine}</td>
+            <td class="routine">${pmRoutine}</td>
+          </tr>`;
+        table.innerHTML += row;
+      }
+    }
+
+    loadRoutineTable();
+  </script>
+</body>
+</html>
