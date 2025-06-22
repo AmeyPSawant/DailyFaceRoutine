@@ -13,9 +13,41 @@
       color: #333;
     }
 
-    h1 {
+    .title-container {
+      display: flex;
+      align-items: center;
       text-align: center;
-      margin-bottom: 10px;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .title-emoji {
+      font-size: 2em;
+    }
+
+    .title-text {
+      font-size: 1.5em;
+      font-weight: bold;
+    }
+
+    .custom-select-wrapper {
+      position: relative;
+      display: inline-block;
+    }
+
+    #day-selector {
+      font-size: 1.2em;
+      font-weight: bold;
+      color: white;
+      background-color: rgba(0, 0, 0, 0.6); /* Faded black box */
+      padding: 10px 40px 10px 15px;
+      border: 1px solid #555;
+      border-radius: 8px;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      appearance: none;
+      cursor: pointer;
     }
 
     h2 {
@@ -81,6 +113,17 @@
       margin-top: 10px;
     }
 
+    .close-overlay {
+      position: absolute;
+      top: 20px;
+      right: 30px;
+      font-size: 2em;
+      color: inherit; /* Inherits color from #overlay.am or #overlay.pm */
+      cursor: pointer;
+      line-height: 1;
+      font-weight: bold;
+    }
+
     #overlay.am {
       background: rgba(255, 255, 255, 0.8);
       color: #000;
@@ -93,7 +136,12 @@
   </style>
 </head>
 <body>
-  <h2>🧴 Daily Skincare Tracker</h2>
+  <div class="title-container">
+    <span class="title-emoji">🧴</span>
+    <div class="custom-select-wrapper">
+      <select id="day-selector"></select>
+    </div>
+  </div>
   <div id="am-routine" class="am">
     <h3>☀️ AM Routine</h3>
     <div class="routine" id="am-steps"></div>
@@ -107,8 +155,12 @@
   <div id="overlay"></div>
 
   <script>
-    // === Google Sheets Integration ===
-    // The ID of your Google Sheet. This is the long string in the middle of your sheet's URL.
+    // === Global State & Configuration ===
+    let routineData = [];
+    let timers = new Map();
+    let currentInterval = null; // To manage the timer interval globally
+
+    // The ID of your Google Sheet.
     const sheetId = "1bnIeueU-AkhRVe6xbQBG7cxdIg8Q7IIhGRl_qBOk6qY";
 
     // Sheet 1: Routines (First row = AM/PM headers, First column = days)
@@ -137,16 +189,29 @@
       }
     }
 
-
     function getCurrentDay() {
       return new Date().toLocaleDateString("en-US", { weekday: 'short' });
+    }
+
+    function getTodayDateString() {
+      return new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+    }
+
+    function hideOverlay() {
+      if (currentInterval) clearInterval(currentInterval);
+      const overlay = document.getElementById("overlay");
+      overlay.style.display = "none";
+      overlay.innerHTML = ''; // Clean up for next time
+
+      const checkboxes = document.querySelectorAll('input[type="checkbox"]');
+      checkboxes.forEach(cb => cb.disabled = false);
     }
 
     function showOverlay(type, waitTime, step) {
       const overlay = document.getElementById("overlay");
       overlay.className = type;
-      // Use innerHTML to structure the content for styling
       overlay.innerHTML = `
+        <span class="close-overlay">&times;</span>
         <div>
           <p class="timer-text">${step} Applied</p>
           <p class="timer-text">Please wait</p>
@@ -155,80 +220,57 @@
       `;
       overlay.style.display = "flex";
 
+      overlay.querySelector('.close-overlay').addEventListener('click', hideOverlay);
+
       const checkboxes = document.querySelectorAll('input[type="checkbox"]');
       checkboxes.forEach(cb => cb.disabled = true);
 
       let counter = waitTime;
       const countdownElement = overlay.querySelector('.timer-countdown');
 
-      const interval = setInterval(() => {
+      if (currentInterval) clearInterval(currentInterval);
+
+      currentInterval = setInterval(() => {
         counter--;
-        // Only update the part of the text that changes for better performance
         if (countdownElement) {
           countdownElement.textContent = `${counter}s`;
         }
         if (counter <= 0) {
-          clearInterval(interval);
-          overlay.style.display = "none";
-          overlay.innerHTML = ''; // Clean up for next time
-          checkboxes.forEach(cb => cb.disabled = false);
+          hideOverlay();
         }
       }, 1000);
     }
 
-    async function init() {
-      try {
-        const currentDay = getCurrentDay();
-        const [routineData, timerData] = await Promise.all([
-          fetchSheetData("Routine"),
-          fetchSheetData("Timer")
-        ]);
+    function saveState() {
+      const state = {};
+      const checkboxes = document.querySelectorAll('.routine input[type="checkbox"]');
+      checkboxes.forEach(cb => {
+        state[cb.id] = cb.checked;
+      });
+      localStorage.setItem('checkboxState', JSON.stringify(state));
+      localStorage.setItem('lastVisitDate', getTodayDateString());
+    }
 
-        if (routineData.length === 0) throw new Error("Routine data is empty. Check sheet name and content.");
-
-        const headers = routineData[0];
-        const dayIndex = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }[currentDay];
-        if (dayIndex === undefined || !routineData[dayIndex + 1]) {
-          throw new Error(`Could not find routine data for today: ${currentDay}. Check the 'Days' column in your sheet.`);
-        }
-        const todayData = routineData[dayIndex + 1];
-
-        const pmHeaderIndex = headers.indexOf("PM");
-        if (pmHeaderIndex === -1) throw new Error("Could not find 'PM' header in the Routines sheet.");
-
-        const amSteps = todayData.slice(1, pmHeaderIndex).filter(step => step); // Filter out empty cells
-        const pmSteps = todayData.slice(pmHeaderIndex + 1).filter(step => step); // Filter out empty cells
-
-        const timers = new Map(timerData.map(([product, time]) => [product.trim(), parseInt(time, 10)]));
-
-        createRoutineList(amSteps, "am-steps", "am", timers);
-        createRoutineList(pmSteps, "pm-steps", "pm", timers);
-      } catch (error) {
-        console.error("Failed to initialize the application:", error);
-        const amContainer = document.getElementById('am-routine');
-        const pmContainer = document.getElementById('pm-routine');
-        if (pmContainer) pmContainer.style.display = 'none'; // Hide the second container
-
-        let errorDetails = `<p><strong>Details:</strong> ${error.message}</p>`;
-        if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
-          errorDetails += `<p>This may be a network or CORS issue. Please check your internet connection and the browser's developer console (F12) for more information.</p>`;
-        } else {
-          errorDetails += `<p>Please ensure your Google Sheet is shared with "Anyone with the link can view" and that the sheet names ("Routine", "Timer") are correct.</p>`;
-        }
-
-        if (amContainer) {
-          amContainer.innerHTML = `
-            <h2 style="color: #d9534f;">❌ Error Loading Routine</h2>
-            ${errorDetails}
-            `;
-        }
+    function loadState() {
+      const savedDate = localStorage.getItem('lastVisitDate');
+      if (savedDate !== getTodayDateString()) {
+        localStorage.removeItem('checkboxState');
+        return;
       }
+
+      const state = JSON.parse(localStorage.getItem('checkboxState') || '{}');
+      Object.keys(state).forEach(id => {
+        const checkbox = document.getElementById(id);
+        if (checkbox) {
+          checkbox.checked = state[id];
+        }
+      });
     }
 
     function createRoutineList(steps, containerId, type, timers) {
       const container = document.getElementById(containerId);
       steps.forEach((step, idx) => {
-        const stepId = `${containerId}-${idx}`;
+        const stepId = `${type}-${step.replace(/\s+/g, '-')}-${idx}`;
 
         const div = document.createElement("div");
         div.className = "step";
@@ -242,6 +284,7 @@
         label.textContent = step;
 
         checkbox.addEventListener("change", () => {
+          saveState(); // Save state on every change
           const waitTime = timers.get(step);
           if (checkbox.checked && waitTime) {
             showOverlay(type, waitTime, step);
@@ -252,6 +295,90 @@
         div.appendChild(label);
         container.appendChild(div);
       });
+    }
+
+    function renderRoutineForDay(day) {
+      document.getElementById('am-steps').innerHTML = '';
+      document.getElementById('pm-steps').innerHTML = '';
+
+      if (routineData.length === 0) {
+        console.error("Routine data is not loaded.");
+        return;
+      }
+
+      const headers = routineData[0];
+      const dayIndex = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }[day];
+      if (dayIndex === undefined || !routineData[dayIndex + 1]) {
+        console.warn(`Could not find routine data for today: ${day}.`);
+        return;
+      }
+      const todayData = routineData[dayIndex + 1];
+
+      const pmHeaderIndex = headers.indexOf("PM");
+      if (pmHeaderIndex === -1) {
+        console.error("Could not find 'PM' header in the Routines sheet.");
+        return;
+      }
+
+      const amSteps = todayData.slice(1, pmHeaderIndex).filter(step => step);
+      const pmSteps = todayData.slice(pmHeaderIndex + 1).filter(step => step);
+
+      createRoutineList(amSteps, "am-steps", "am", timers);
+      createRoutineList(pmSteps, "pm-steps", "pm", timers);
+
+      loadState();
+    }
+
+    function setupDaySelector() {
+      const selector = document.getElementById('day-selector');
+      const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+      days.forEach(day => {
+        const option = document.createElement('option');
+        option.value = day;
+        option.textContent = `${day} Routine`;
+        selector.appendChild(option);
+      });
+
+      selector.value = getCurrentDay();
+
+      selector.addEventListener('change', (e) => {
+        renderRoutineForDay(e.target.value);
+      });
+    }
+
+    async function init() {
+      try {
+        const [fetchedRoutineData, fetchedTimerData] = await Promise.all([
+          fetchSheetData("Routine"),
+          fetchSheetData("Timer")
+        ]);
+
+        routineData = fetchedRoutineData;
+        timers = new Map(fetchedTimerData.map(([product, time]) => [product.trim(), parseInt(time, 10)]));
+
+        setupDaySelector();
+        renderRoutineForDay(getCurrentDay());
+
+      } catch (error) {
+        console.error("Failed to initialize the application:", error);
+        const amContainer = document.getElementById('am-routine');
+        const pmContainer = document.getElementById('pm-routine');
+        if (pmContainer) pmContainer.style.display = 'none';
+
+        let errorDetails = `<p><strong>Details:</strong> ${error.message}</p>`;
+        if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
+          errorDetails += `<p>This may be a network or CORS issue. Please check your internet connection and the browser's developer console (F12) for more information.</p>`;
+        } else {
+          errorDetails += `<p>Please ensure your Google Sheet is shared with "Anyone with the link can view" and that the sheet names ("Routine", "Timer") are correct.</p>`;
+        }
+
+        if (amContainer) {
+          amContainer.innerHTML = `
+            <h3 style="color: #d9534f;">❌ Error Loading Routine</h3>
+            ${errorDetails}
+            `;
+        }
+      }
     }
 
     init();
