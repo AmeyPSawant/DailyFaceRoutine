@@ -7,7 +7,7 @@
   <style>
     body {
       font-family: 'Segoe UI', sans-serif;
-      background: #f5f7fa;
+      background: linear-gradient(to bottom, #fefcea, #f1da36);
       margin: 0;
       padding: 20px;
       color: #333;
@@ -97,22 +97,33 @@
 
   <script>
     // === Google Sheets Integration ===
-    // Replace with your own published Google Sheets URL
-    // const sheetUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQPs2suflkPlpptFbPYWvIUyHIKKSBiqNY0Bi218FUmJvD0eYAljcNGCSWJN-kTShdMOJUeyZl1sDxt/pubhtml";
-
-    const sheetUrl = "https://docs.google.com/spreadsheets/d/1bnIeueU-AkhRVe6xbQBG7cxdIg8Q7IIhGRl_qBOk6qY";
+    // The ID of your Google Sheet. This is the long string in the middle of your sheet's URL.
+    const sheetId = "1bnIeueU-AkhRVe6xbQBG7cxdIg8Q7IIhGRl_qBOk6qY";
 
     // Sheet 1: Routines (First row = AM/PM headers, First column = days)
     // Sheet 2: Timers (First column = Product, Second column = Wait time in seconds)
 
     async function fetchSheetData(sheetName) {
-      const base = sheetUrl.replace("/edit#gid=", "");
-      const url = `${base}/gviz/tq?tqx=out:json&sheet=${sheetName}`;
-      const response = await fetch(url);
-      const text = await response.text();
-      const json = JSON.parse(text.substring(47).slice(0, -2));
-      const rows = json.table.rows;
-      return rows.map(row => row.c.map(cell => cell?.v || ""));
+      const url = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json&sheet=${sheetName}`;
+      try {
+        const response = await fetch(url);
+        if (!response.ok) {
+          throw new Error(`Network response was not ok (${response.status})`);
+        }
+        const text = await response.text();
+        // The response is JSONP. We need to extract the JSON part.
+        const jsonpData = text.substring(text.indexOf('(') + 1, text.lastIndexOf(')'));
+        if (!jsonpData) throw new Error("Invalid JSONP response format from Google Sheets.");
+
+        const json = JSON.parse(jsonpData);
+        if (json.status === 'error') throw new Error(`Google Sheets API Error: ${json.errors[0].detailed_message}`);
+
+        const rows = json.table.rows;
+        return rows ? rows.map(row => row.c.map(cell => cell?.v || "")) : [];
+      } catch (error) {
+        console.error(`Failed to fetch or parse data for sheet "${sheetName}":`, error);
+        throw error; // Re-throw the error to be caught by the caller
+      }
     }
 
 
@@ -142,27 +153,45 @@
     }
 
     async function init() {
-      const currentDay = getCurrentDay();
-      const [routineData, timerData] = await Promise.all([
-        fetchSheetData("Routines"),
-        fetchSheetData("Timers")
-      ]);
+      try {
+        const currentDay = getCurrentDay();
+        const [routineData, timerData] = await Promise.all([
+          fetchSheetData("Routine"),
+          fetchSheetData("Timer")
+        ]);
 
+        if (routineData.length === 0) throw new Error("Routine data is empty. Check sheet name and content.");
 
-      const headers = routineData[0];
-      const dayIndex = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }[currentDay];
-      const todayData = routineData[dayIndex + 1];
+        const headers = routineData[0];
+        const dayIndex = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }[currentDay];
+        if (dayIndex === undefined || !routineData[dayIndex + 1]) {
+          throw new Error(`Could not find routine data for today: ${currentDay}. Check the 'Days' column in your sheet.`);
+        }
+        const todayData = routineData[dayIndex + 1];
 
-      const amSteps = todayData.slice(1, headers.indexOf("PM"));
-      const pmSteps = todayData.slice(headers.indexOf("PM") + 1);
+        const pmHeaderIndex = headers.indexOf("PM");
+        if (pmHeaderIndex === -1) throw new Error("Could not find 'PM' header in the Routines sheet.");
 
-      const timers = {};
-      timerData.forEach(([product, time]) => {
-        if (product) timers[product.trim()] = parseInt(time);
-      });
+        const amSteps = todayData.slice(1, pmHeaderIndex).filter(step => step); // Filter out empty cells
+        const pmSteps = todayData.slice(pmHeaderIndex + 1).filter(step => step); // Filter out empty cells
 
-      createRoutineList(amSteps, "am-steps", "am", timers);
-      createRoutineList(pmSteps, "pm-steps", "pm", timers);
+        const timers = new Map(timerData.map(([product, time]) => [product.trim(), parseInt(time, 10)]));
+
+        createRoutineList(amSteps, "am-steps", "am", timers);
+        createRoutineList(pmSteps, "pm-steps", "pm", timers);
+      } catch (error) {
+        console.error("Failed to initialize the application:", error);
+        const amContainer = document.getElementById('am-routine');
+        const pmContainer = document.getElementById('pm-routine');
+        if (pmContainer) pmContainer.style.display = 'none'; // Hide the second container
+
+        if (amContainer) {
+          amContainer.innerHTML = `
+            <h2 style="color: #d9534f;">❌ Error Loading Routine</h2>
+            <p><strong>Details:</strong> ${error.message}</p>
+            <p>Please ensure your Google Sheet is shared with "Anyone with the link can view" and check the console (F12) for more info.</p>`;
+        }
+      }
     }
 
     function createRoutineList(steps, containerId, type, timers) {
@@ -182,8 +211,9 @@
         label.textContent = step;
 
         checkbox.addEventListener("change", () => {
-          if (checkbox.checked && timers[step]) {
-            showOverlay(type, timers[step], step);
+          const waitTime = timers.get(step);
+          if (checkbox.checked && waitTime) {
+            showOverlay(type, waitTime, step);
           }
         });
 
