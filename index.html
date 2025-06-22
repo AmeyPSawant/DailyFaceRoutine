@@ -36,12 +36,23 @@
       display: inline-block;
     }
 
+    .custom-select-wrapper::after {
+      content: '▼';
+      font-size: 0.8em;
+      color: white;
+      position: absolute;
+      right: 15px;
+      top: 50%;
+      transform: translateY(-50%);
+      pointer-events: none;
+    }
+
     #day-selector {
       font-size: 1.2em;
       font-weight: bold;
       color: white;
       background-color: rgba(0, 0, 0, 0.6); /* Faded black box */
-      padding: 10px 40px 10px 15px;
+      padding: 10px 45px 10px 20px;
       border: 1px solid #555;
       border-radius: 8px;
       -webkit-appearance: none;
@@ -137,10 +148,10 @@
 </head>
 <body>
   <div class="title-container">
-    <span class="title-emoji">🧴</span>
     <div class="custom-select-wrapper">
       <select id="day-selector"></select>
     </div>
+    <span class="title-text">Routine</span>
   </div>
   <div id="am-routine" class="am">
     <h3>☀️ AM Routine</h3>
@@ -190,11 +201,22 @@
     }
 
     function getCurrentDay() {
-      return new Date().toLocaleDateString("en-US", { weekday: 'short' });
+      return new Date().toLocaleDateString("en-US", { weekday: 'long' });
     }
 
-    function getTodayDateString() {
-      return new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+    function getLastSaturdayEOW() {
+      const now = new Date();
+      const todayDay = now.getDay(); // Sunday is 0, Saturday is 6
+      // Days to subtract to get to the last Saturday.
+      // If today is Sunday (0), we subtract 1 day. (0 + 1) % 7 = 1.
+      // If today is Saturday (6), we subtract 0 days. (6 + 1) % 7 = 0.
+      const daysSinceSaturday = (todayDay + 1) % 7;
+
+      const lastSaturday = new Date(now);
+      lastSaturday.setDate(now.getDate() - daysSinceSaturday);
+      lastSaturday.setHours(23, 59, 59, 999);
+
+      return lastSaturday;
     }
 
     function hideOverlay() {
@@ -241,33 +263,42 @@
       }, 1000);
     }
 
-    function saveState() {
-      const state = {};
+    function saveState(day) {
+      const weeklyState = JSON.parse(localStorage.getItem('weeklyRoutineState') || '{}');
+      if (!weeklyState.days) {
+        weeklyState.days = {};
+      }
+
+      const dayState = {};
       const checkboxes = document.querySelectorAll('.routine input[type="checkbox"]');
       checkboxes.forEach(cb => {
-        state[cb.id] = cb.checked;
+        dayState[cb.id] = cb.checked;
       });
-      localStorage.setItem('checkboxState', JSON.stringify(state));
-      localStorage.setItem('lastVisitDate', getTodayDateString());
+
+      weeklyState.days[day] = dayState;
+      localStorage.setItem('weeklyRoutineState', JSON.stringify(weeklyState));
     }
 
-    function loadState() {
-      const savedDate = localStorage.getItem('lastVisitDate');
-      if (savedDate !== getTodayDateString()) {
-        localStorage.removeItem('checkboxState');
+    function loadState(day) {
+      const weeklyState = JSON.parse(localStorage.getItem('weeklyRoutineState') || '{}');
+      const dayState = weeklyState.days ? weeklyState.days[day] : null;
+
+      if (!dayState) {
+        // No saved state for this day, ensure all are unchecked
+        const checkboxes = document.querySelectorAll('.routine input[type="checkbox"]');
+        checkboxes.forEach(cb => cb.checked = false);
         return;
       }
 
-      const state = JSON.parse(localStorage.getItem('checkboxState') || '{}');
-      Object.keys(state).forEach(id => {
+      Object.keys(dayState).forEach(id => {
         const checkbox = document.getElementById(id);
         if (checkbox) {
-          checkbox.checked = state[id];
+          checkbox.checked = dayState[id];
         }
       });
     }
 
-    function createRoutineList(steps, containerId, type, timers) {
+    function createRoutineList(steps, containerId, type, timers, day) {
       const container = document.getElementById(containerId);
       steps.forEach((step, idx) => {
         const stepId = `${type}-${step.replace(/\s+/g, '-')}-${idx}`;
@@ -284,7 +315,7 @@
         label.textContent = step;
 
         checkbox.addEventListener("change", () => {
-          saveState(); // Save state on every change
+          saveState(day); // Save state for the specific day
           const waitTime = timers.get(step);
           if (checkbox.checked && waitTime) {
             showOverlay(type, waitTime, step);
@@ -306,10 +337,11 @@
         return;
       }
 
+      const dayShort = day.substring(0, 3);
       const headers = routineData[0];
-      const dayIndex = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }[day];
+      const dayIndex = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }[dayShort];
       if (dayIndex === undefined || !routineData[dayIndex + 1]) {
-        console.warn(`Could not find routine data for today: ${day}.`);
+        console.warn(`Could not find routine data for: ${day}.`);
         return;
       }
       const todayData = routineData[dayIndex + 1];
@@ -323,19 +355,19 @@
       const amSteps = todayData.slice(1, pmHeaderIndex).filter(step => step);
       const pmSteps = todayData.slice(pmHeaderIndex + 1).filter(step => step);
 
-      createRoutineList(amSteps, "am-steps", "am", timers);
-      createRoutineList(pmSteps, "pm-steps", "pm", timers);
+      createRoutineList(amSteps, "am-steps", "am", timers, day);
+      createRoutineList(pmSteps, "pm-steps", "pm", timers, day);
 
-      loadState();
+      loadState(day);
     }
 
     function setupDaySelector() {
       const selector = document.getElementById('day-selector');
-      const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+      const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
       days.forEach(day => {
         const option = document.createElement('option');
         option.value = day;
-        option.textContent = `${day} Routine`;
+        option.textContent = day;
         selector.appendChild(option);
       });
 
@@ -347,6 +379,16 @@
     }
 
     async function init() {
+      // Weekly reset logic: Clears all data after Saturday 11:59:59 PM
+      const lastSaturdayEOW = getLastSaturdayEOW();
+      const weeklyState = JSON.parse(localStorage.getItem('weeklyRoutineState') || '{}');
+      const lastReset = weeklyState.lastReset ? new Date(weeklyState.lastReset) : null;
+
+      if (!lastReset || lastReset < lastSaturdayEOW) {
+        console.log("New week detected. Resetting all saved states.");
+        localStorage.setItem('weeklyRoutineState', JSON.stringify({ lastReset: new Date().toISOString() }));
+      }
+
       try {
         const [fetchedRoutineData, fetchedTimerData] = await Promise.all([
           fetchSheetData("Routine"),
